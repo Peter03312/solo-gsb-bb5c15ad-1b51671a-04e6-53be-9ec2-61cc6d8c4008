@@ -1,4 +1,4 @@
-import { BackwardInfo, BreakPeriod, CommandEdge, CrewAssignment, CrewScheduleResult, CycleInfo, NodeRuntime, Project, ReplanLocked, ReplanResult, ScheduleResult } from './types';
+import { BackwardInfo, BreakPeriod, CommandEdge, CrewAssignment, CrewScheduleResult, CycleInfo, NodeRuntime, Project, ReplanLocked, ReplanResult, ReviewResult, ReviewRow, ReviewSnapshot, ReviewStatus, ScheduleResult } from './types';
 
 const EPS = 1e-9;
 
@@ -642,4 +642,116 @@ function topoOrder(project: Project): string[] {
     }
   }
   return order;
+}
+
+/** 计划起止判定“延迟”的容差（秒）：模拟时钟为 100ms 离散步进，1e-6 吸收浮点误差。 */
+const REVIEW_LATE_EPS = 1e-6;
+
+/**
+ * 模拟开始时冻结本次排程快照：逐条复制口令的计划起止、时长与名称，
+ * 之后的图编辑、现场续排均不再影响快照。图存在环依赖时冻结一份标记
+ * cyclic=true 并带成环路径的快照（此时计划时间不可信，复盘界面显示不可用）。
+ */
+export function buildReviewSnapshot(
+  project: Project,
+  schedule: ScheduleResult | null,
+  cycle: CycleInfo | undefined,
+): ReviewSnapshot {
+  const cyclic = !!cycle;
+  const nodes = project.nodes.map((n) => {
+    const plannedStart = cyclic ? 0 : schedule?.starts[n.id] ?? 0;
+    return {
+      id: n.id,
+      name: n.name,
+      duration: n.duration,
+      plannedStart,
+      plannedEnd: plannedStart + n.duration,
+    };
+  });
+  return {
+    makespan: cyclic || !schedule?.ok ? 0 : schedule.makespan,
+    nodes,
+    cyclic,
+    cycle,
+  };
+}
+
+/**
+ * 依据冻结快照与当前模拟执行记录生成执行复盘（纯计算，不写回项目）：
+ * - 行按实际开始时间升序排列，未执行口令（无实际开始）排在最后，同值按口令 ID 稳定排序；
+ * - 状态：已开始且开始偏差 ≤ 0（含提前/补发）为“按时”，开始晚于计划为“延迟”，尚未开始为“未执行”；
+ * - 总览：完成数（已完成口令）、最大开始延迟、实际总工期与计划总工期偏差。
+ * 模拟期间新增 / 删除口令不改变冻结快照：仅快照内的口令参与复盘。
+ */
+export function buildReview(
+  snapshot: ReviewSnapshot,
+  runtime: Record<string, NodeRuntime>,
+): ReviewResult {
+  const rows: ReviewRow[] = snapshot.nodes.map((sn) => {
+    const rt = runtime[sn.id];
+    const started = typeof rt?.start === 'number' && Number.isFinite(rt.start);
+    const actualStart = started ? rt.start : undefined;
+    const running = rt?.status === 'running';
+    const done = rt?.status === 'done';
+    // 执行中口令展示预计结束（实际开始 + 冻结时长）；已完成口令展示实际结束
+    const actualEnd = started
+      ? done && typeof rt?.end === 'number' && Number.isFinite(rt.end)
+        ? rt.end
+        : (actualStart as number) + sn.duration
+      : undefined;
+    let status: ReviewStatus;
+    if (!started) {
+      status = 'notrun';
+    } else {
+      status = (actualStart as number) > sn.plannedStart + REVIEW_LATE_EPS ? 'delayed' : 'ontime';
+    }
+    return {
+      nodeId: sn.id,
+      name: sn.name,
+      status,
+      done,
+      running,
+      plannedStart: sn.plannedStart,
+      plannedEnd: sn.plannedEnd,
+      actualStart,
+      actualEnd,
+      startDeviation: started ? (actualStart as number) - sn.plannedStart : undefined,
+      endDeviation: started ? (actualEnd as number) - sn.plannedEnd : undefined,
+    };
+  });
+
+  rows.sort((a, b) => {
+    if (a.actualStart === undefined && b.actualStart === undefined) {
+      return a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0;
+    }
+    if (a.actualStart === undefined) return 1;
+    if (b.actualStart === undefined) return -1;
+    if (Math.abs(a.actualStart - b.actualStart) > REVIEW_LATE_EPS) {
+      return a.actualStart - b.actualStart;
+    }
+    return a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0;
+  });
+
+  let completed = 0;
+  let maxDelay = 0;
+  let actualMakespan = 0;
+  for (const r of rows) {
+    if (r.done) completed++;
+    if (r.status === 'delayed' && r.startDeviation !== undefined) {
+      maxDelay = Math.max(maxDelay, r.startDeviation);
+    }
+    if (r.actualEnd !== undefined) actualMakespan = Math.max(actualMakespan, r.actualEnd);
+  }
+
+  return {
+    rows,
+    summary: {
+      total: rows.length,
+      completed,
+      maxDelay,
+      plannedMakespan: snapshot.makespan,
+      actualMakespan,
+      makespanDeviation: actualMakespan - snapshot.makespan,
+    },
+  };
 }

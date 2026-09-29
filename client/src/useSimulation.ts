@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { NodeRuntime, Project, ScheduleResult, SimState } from './types';
+import { buildReviewSnapshot } from './schedule';
+import { CycleInfo, NodeRuntime, Project, ReviewSnapshot, ScheduleResult, SimState } from './types';
 
 const TICK_MS = 100;
 
@@ -9,6 +10,11 @@ export interface Simulation {
   runtime: Record<string, NodeRuntime>;
   /** 现场续排确认后的待执行触发时间（仅本次模拟；开始/重置时清空） */
   replanStarts: Record<string, number>;
+  /**
+   * 模拟开始时冻结的本次排程快照（执行复盘的唯一计划来源）。
+   * 模拟期间的图编辑与现场续排均不改写它；重置时清空。
+   */
+  reviewSnapshot: ReviewSnapshot | null;
   start: () => void;
   pause: () => void;
   resume: () => void;
@@ -20,17 +26,24 @@ export interface Simulation {
 /**
  * 按排程模拟执行口令。
  * - start/pause/resume/reset 控制时钟；
+ * - start 时冻结本次排程快照供“执行复盘”只读查看，模拟期间的图编辑与现场续排不改写快照，reset 清空；
  * - 排程或口令图变化时，仅同步“尚未执行”的口令的排定时间，
  *   正在执行与已完成的口令保持其实际记录不变；
  * - 排定时间被改到过去且仍未执行的口令，会在下一拍立即补发；
  * - 暂停中可通过现场续排（applyReplan）覆盖待执行口令的触发时间，
  *   仅作用于本次模拟，开始/重置时清空。
  */
-export function useSimulation(project: Project, schedule: ScheduleResult | null): Simulation {
+export function useSimulation(
+  project: Project,
+  schedule: ScheduleResult | null,
+  /** 开始模拟瞬间图的环依赖（有环时快照标记 cyclic 并记录成环路径，复盘显示不可用） */
+  cycle: CycleInfo | undefined,
+): Simulation {
   const [state, setState] = useState<SimState>('idle');
   const [time, setTime] = useState(0);
   const [runtime, setRuntime] = useState<Record<string, NodeRuntime>>({});
   const [replanStarts, setReplanStarts] = useState<Record<string, number>>({});
+  const [reviewSnapshot, setReviewSnapshot] = useState<ReviewSnapshot | null>(null);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -42,6 +55,8 @@ export function useSimulation(project: Project, schedule: ScheduleResult | null)
   projectRef.current = project;
   const replanRef = useRef(replanStarts);
   replanRef.current = replanStarts;
+  const cycleRef = useRef(cycle);
+  cycleRef.current = cycle;
 
   // 口令图结构变化：移除已删除口令的运行记录与续排触发时间，为新增口令补登记。
   useEffect(() => {
@@ -118,6 +133,8 @@ export function useSimulation(project: Project, schedule: ScheduleResult | null)
     for (const n of projectRef.current.nodes) initial[n.id] = { status: 'pending' };
     setRuntime(initial);
     setReplanStarts({});
+    // 冻结本次排程快照：模拟期间的图编辑与现场续排都不改写它，供结束 / 暂停时只读复盘
+    setReviewSnapshot(buildReviewSnapshot(projectRef.current, scheduleRef.current, cycleRef.current));
     timeRef.current = 0;
     setTime(0);
     setState('running');
@@ -137,6 +154,7 @@ export function useSimulation(project: Project, schedule: ScheduleResult | null)
     setTime(0);
     setRuntime({});
     setReplanStarts({});
+    setReviewSnapshot(null);
   }, []);
 
   // 现场续排：仅暂停中可确认；整体替换待执行口令的触发时间（仅本次模拟）
@@ -145,5 +163,5 @@ export function useSimulation(project: Project, schedule: ScheduleResult | null)
     setReplanStarts(starts);
   }, []);
 
-  return { state, time, runtime, replanStarts, start, pause, resume, reset, applyReplan };
+  return { state, time, runtime, replanStarts, reviewSnapshot, start, pause, resume, reset, applyReplan };
 }

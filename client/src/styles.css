@@ -705,6 +705,100 @@ button.danger { background: transparent; border-color: var(--red); color: var(--
 .replan-actions button { padding: 5px 18px; }
 .delta-down { color: var(--green); font-size: 11px; }
 
+/* ---------- 执行复盘 ---------- */
+.review-panel {
+  flex-shrink: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+.review-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+}
+.review-panel-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.review-panel-head .spacer { flex: 1; }
+.review-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.review-meta-off { color: var(--red); }
+.review-toggle {
+  padding: 2px 10px;
+  font-size: 12px;
+}
+.review-panel-body {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 2px 16px 10px;
+}
+.review-panel-body .hint { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 6px 0 0; }
+.review-unavailable { color: var(--muted); }
+.review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 6px 0 8px;
+}
+.review-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+  padding: 4px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.review-stat-label { color: var(--muted); font-size: 11px; }
+.review-stat-value { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.review-stat-sub { color: var(--muted); font-size: 11px; font-weight: 400; }
+.review-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.review-table th,
+.review-table td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.review-table th { color: var(--muted); font-weight: 500; background: var(--panel-2); }
+.review-row.review-ontime td:first-child { color: var(--green); }
+.review-row.review-delayed td:first-child { color: var(--amber); }
+.review-row.review-notrun td:first-child { color: var(--muted); }
+.review-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(245, 166, 35, 0.16);
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 500;
+}
+.review-status {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+.review-status-ontime { background: rgba(62, 207, 142, 0.16); color: var(--green); }
+.review-status-delayed { background: rgba(245, 166, 35, 0.18); color: var(--amber); }
+.review-status-notrun { background: rgba(139, 147, 167, 0.16); color: var(--muted); }
+.dev-up { color: var(--amber); font-size: 11px; }
+.dev-down { color: var(--green); font-size: 11px; }
+.dev-zero { color: var(--muted); font-size: 11px; }
+
 .boot-message {
   height: 100%;
   display: flex;

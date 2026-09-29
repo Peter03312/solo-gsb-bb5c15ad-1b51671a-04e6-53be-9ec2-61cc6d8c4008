@@ -155,3 +155,71 @@ export interface NodeRuntime {
   /** 实际/预计结束时间（秒） */
   end?: number;
 }
+
+/**
+ * 执行复盘在模拟开始时冻结的排程快照：每条口令的计划起止与时长。
+ * 模拟期间的图编辑与现场续排均不改写本快照；重置模拟时清空。
+ */
+export interface ReviewSnapshotNode {
+  id: string;
+  name: string;
+  duration: number;
+  /** 计划开始时间（秒，相对排程零点） */
+  plannedStart: number;
+  /** 计划结束时间（秒）= plannedStart + duration */
+  plannedEnd: number;
+}
+
+export interface ReviewSnapshot {
+  /** 冻结时全图计划总工期（秒） */
+  makespan: number;
+  nodes: ReviewSnapshotNode[];
+  /** 开始模拟的时刻图是否存在环依赖；为 true 时复盘不可用 */
+  cyclic: boolean;
+  /** cyclic=true 时冻结的成环路径（用于不可用提示中展示） */
+  cycle?: CycleInfo;
+}
+
+/** 复盘中单条口令的执行状态：按时 / 延迟 / 未执行 */
+export type ReviewStatus = 'ontime' | 'delayed' | 'notrun';
+
+/** 复盘中单条口令的计划与实际对比行（实际开始/结束缺失表示未执行） */
+export interface ReviewRow {
+  nodeId: string;
+  name: string;
+  status: ReviewStatus;
+  /** 是否已完成（false 时为执行中或未执行） */
+  done: boolean;
+  /** 是否仍在执行（实际开始已记录但尚未完成） */
+  running: boolean;
+  plannedStart: number;
+  plannedEnd: number;
+  actualStart?: number;
+  /** 执行中口令为预计结束（开始 + 冻结时长），并非实际完成时刻 */
+  actualEnd?: number;
+  /** 开始偏差（实际开始 − 计划开始，秒；未执行为 undefined） */
+  startDeviation?: number;
+  /** 结束偏差（实际/预计结束 − 计划结束，秒；未执行为 undefined） */
+  endDeviation?: number;
+}
+
+/** 复盘总览统计 */
+export interface ReviewSummary {
+  /** 口令总数（冻结快照内） */
+  total: number;
+  /** 完成数（已完成的口令） */
+  completed: number;
+  /** 最大开始延迟（秒；无延迟口令为 0） */
+  maxDelay: number;
+  /** 计划总工期（秒，来自冻结快照） */
+  plannedMakespan: number;
+  /** 实际总工期（秒，实际/预计结束的最大值；尚无口令开始时为 0） */
+  actualMakespan: number;
+  /** 总工期偏差（实际总工期 − 计划总工期，秒） */
+  makespanDeviation: number;
+}
+
+export interface ReviewResult {
+  rows: ReviewRow[];
+  summary: ReviewSummary;
+}

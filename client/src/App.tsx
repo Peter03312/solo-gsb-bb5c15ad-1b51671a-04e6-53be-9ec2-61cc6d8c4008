@@ -3,6 +3,7 @@ import { loadProject, saveProject } from './api';
 import { CrewPanel } from './CrewPanel';
 import { GraphCanvas, Selection } from './GraphCanvas';
 import { ReplanPanel } from './ReplanPanel';
+import { ReviewPanel } from './ReviewPanel';
 import { computeCrewSchedule, computeReplan, computeSchedule } from './schedule';
 import { SidePanel } from './SidePanel';
 import { SnippetPanel } from './SnippetPanel';
@@ -133,7 +134,7 @@ export default function App() {
   const effectiveSchedule = schedule?.ok ? schedule : lastValid;
   const cycle = schedule && !schedule.ok ? schedule.cycle : undefined;
 
-  const sim = useSimulation(project ?? EMPTY, effectiveSchedule);
+  const sim = useSimulation(project ?? EMPTY, effectiveSchedule, cycle);
 
   // 现场续排：仅在暂停时打开；离开暂停（继续/重置）自动关闭
   const [replanOpen, setReplanOpen] = useState(false);
@@ -523,6 +524,16 @@ export default function App() {
         simActive={simActive || sim.state === 'finished'}
         replanStarts={sim.replanStarts}
       />
+
+      {sim.state !== 'running' && (
+        <ReviewPanel
+          snapshot={sim.reviewSnapshot}
+          project={project}
+          runtime={sim.runtime}
+          cyclic={sim.reviewSnapshot?.cyclic ?? false}
+          cycle={cycle}
+        />
+      )}
 
       {replanOpen && (
         <ReplanPanel
